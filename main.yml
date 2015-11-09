@@ -1,0 +1,65 @@
+---
+# playbook provisions a dev environment
+
+- hosts: local
+  tasks:
+    - name: clean yum cache
+      command: /usr/bin/yum clean all
+      register: yum_clean
+      sudo: yes
+      when: yum_clean is not defined
+
+    - name: Install libselinux-python
+      yum: name=libselinux-python state=present
+      sudo: yes
+
+    - name: Install epel
+      yum: name=epel-release-6 state=present
+      sudo: yes
+
+    - name: Retrieve RCUP - dotfile management
+      sudo: yes
+      get_url: url=http://download.opensuse.org/repositories/utilities/CentOS_6/utilities.repo dest=/etc/yum.repos.d/
+
+    - name: Install preferred configuration
+      sudo: yes
+      yum: name={{ item }} state=present
+      with_items:
+        - zsh
+        - rcm
+        - vim-enhanced
+        - git
+        - the_silver_searcher
+
+    - name: Make zsh default shell
+      sudo: yes
+      shell: usermod -s /bin/zsh vagrant
+
+    - name: Copy dotfiles to VM root
+      sudo: yes
+      copy: src=~/dotfiles dest=/home/vagrant/ owner=vagrant group=vagrant
+
+    # not sure why we have to do this and RCM doesn't handle
+    - name: Ensure Vundle is installed properly
+      git: repo=git@github.com:VundleVim/Vundle.vim.git dest=/home/vagrant/.vim/bundle/Vundle.vim
+
+    - name: Install and symlink dotfile configs
+      shell: yes "" | env RCRC=/home/vagrant/dotfiles/rcrc rcup
+      register: rcup_output
+
+    - name: Copy custom color schemes
+      copy: src=~/.vim/colors dest=/home/vagrant/.vim/ owner=vagrant group=vagrant
+
+    # not sure why we have to do this and RCM doesn't handle
+    - name: Install Vim dependencies
+      shell: vim +BundleInstall +qall
+
+    - name: Set vagrant directory as ssh directory
+      sudo: yes
+      lineinfile: >
+        dest=/etc/profile
+        line='{{ item }}'
+      with_items:
+        - cd /vagrant
+        - export EDITOR=vim
+        - export RCRC=/home/vagrant/dotfiles/rcrc
